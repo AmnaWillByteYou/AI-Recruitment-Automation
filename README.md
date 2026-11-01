@@ -40,20 +40,6 @@ The 0–100 score is a document-evidence signal, not a probability of job perfor
 - Gmail credentials for email nodes.
 - A test mailbox and synthetic résumé PDFs for validation.
 
-## Setup overview
-
-1. Create two Google Sheets: one for candidate records and one for the review audit log.
-2. Add the exact first-row headers from `docs/candidate-data-headers.csv` and `docs/review-audit-headers.csv`.
-3. Import the four JSON files individually from `workflows/` into the same n8n workspace.
-4. In the Google Sheets nodes, replace the spreadsheet ID placeholders with your own IDs and select the correct tabs.
-5. Connect Google Sheets, Gmail, and AI provider credentials in the relevant nodes. Credentials are not included in exports.
-6. Replace `REPLACE_WITH_RECRUITER_EMAIL` in the analytics and error-monitoring workflows.
-7. Configure workflow 04 as the Error Workflow for workflows 01–03.
-8. Restrict access to the recruiter review form. A private-looking URL is not a substitute for access control.
-9. Follow the synthetic-data test checklist in [`docs/setup-guide.md`](docs/setup-guide.md). Keep all workflows inactive until tests pass.
-
-Detailed setup and validation notes: [`docs/setup-guide.md`](docs/setup-guide.md).
-
 ## Privacy and responsible use
 
 This project processes personal information such as names, contact details, and résumés. Use synthetic data for demos. For any real deployment, obtain appropriate authorization, restrict access, define retention/deletion rules, protect candidate records, and provide a way to correct inaccurate information. Do not infer or score protected characteristics or demographic proxies. Human reviewers must independently evaluate evidence and make all hiring decisions.
