@@ -1,0 +1,805 @@
+{
+  "name": "Recruitment System 02 - Human Review, Status Management & Audit Trail",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Recruiter Decision Console",
+        "formDescription": "Internal use only. Enter a Candidate ID and record a human decision. Use the exact Candidate ID from the Candidate Data sheet.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Candidate ID",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Decision",
+              "fieldType": "text",
+              "placeholder": "Shortlist / Reject / Hold / Request More Information",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Reviewer Name",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Review Notes",
+              "fieldType": "textarea",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        0
+      ],
+      "id": "dd4baaab-a2bf-46c1-8e64-cb8f6943a243",
+      "name": "Recruiter Review Form",
+      "webhookId": "80a01f71-57ee-49f7-86de-3a8c4fa0ee32"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_CANDIDATE_DATA_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "id"
+        },
+        "returnAll": true,
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        240,
+        0
+      ],
+      "id": "32bc1515-fd6b-4310-83a3-5b6758ffb910",
+      "name": "Find Candidate Record",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const form = $('Recruiter Review Form').first().json;\nconst rows = $input.all().map(x=>x.json||{});\nconst id = String(form['Candidate ID']??'').trim();\nconst decisionRaw = String(form.Decision??'').trim().toLowerCase();\nconst reviewer = String(form['Reviewer Name']??'').trim();\nconst notes = String(form['Review Notes']??'').trim();\nconst allowed = {\n 'shortlist':'Shortlisted',\n 'reject':'Rejected by Recruiter',\n 'hold':'On Hold',\n 'request more information':'More Information Requested'\n};\nif (!id || !reviewer || !notes) throw new Error('Candidate ID, reviewer name and review notes are required.');\nif (!allowed[decisionRaw]) throw new Error('Decision must be Shortlist, Reject, Hold, or Request More Information.');\nconst found = rows.find(r=>String(r['Candidate ID']??'').trim()===id);\nif (!found) throw new Error(`No candidate found for Candidate ID ${id}.`);\nconst now = new Date().toISOString();\nconst status = allowed[decisionRaw];\nconst updated = {\n ...found,\n 'Candidate ID':id,\n Status:status,\n Reviewer:reviewer,\n 'Review Decision':decisionRaw.replace(/\\\\b\\\\w/g,c=>c.toUpperCase()),\n 'Review Notes':notes,\n 'Last Updated':now\n};\nreturn [{json:{\n ...updated,\n 'Review Event ID':`REV-${now.replace(/[-:.TZ]/g,'')}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,\n 'Previous Status':String(found.Status??'Unknown'),\n 'New Status':status,\n Decision:decisionRaw.replace(/\\\\b\\\\w/g,c=>c.toUpperCase()),\n 'Reviewed At':now\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "id": "7f09cf7e-6a1e-4392-858a-9c9199869f05",
+      "name": "Validate Decision & Load Candidate Details"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_CANDIDATE_DATA_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "Candidate ID"
+          ],
+          "schema": [
+            {
+              "id": "Candidate ID",
+              "displayName": "Candidate ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Phone Number",
+              "displayName": "Phone Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Role Title",
+              "displayName": "Role Title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Job ID",
+              "displayName": "Job ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Assessment Summary",
+              "displayName": "Assessment Summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Match Score",
+              "displayName": "Match Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Essential Skills Rating",
+              "displayName": "Essential Skills Rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Relevant Experience Rating",
+              "displayName": "Relevant Experience Rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Role Qualifications Rating",
+              "displayName": "Role Qualifications Rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Evidence Quality Rating",
+              "displayName": "Evidence Quality Rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Preferred Skills Rating",
+              "displayName": "Preferred Skills Rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Strengths",
+              "displayName": "Strengths",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Skills Evidence",
+              "displayName": "Skills Evidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Relevant Gaps",
+              "displayName": "Relevant Gaps",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Missing Evidence",
+              "displayName": "Missing Evidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "AI Confidence",
+              "displayName": "AI Confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Potential Duplicate",
+              "displayName": "Potential Duplicate",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Duplicate Of Candidate ID",
+              "displayName": "Duplicate Of Candidate ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "AI Decision",
+              "displayName": "AI Decision",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Submitted At",
+              "displayName": "Submitted At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Last Updated",
+              "displayName": "Last Updated",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Reviewer",
+              "displayName": "Reviewer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Review Decision",
+              "displayName": "Review Decision",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Review Notes",
+              "displayName": "Review Notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        740,
+        0
+      ],
+      "id": "96064cdd-1e58-4641-ac56-9450205b6d14",
+      "name": "Update Candidate Pipeline Record"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_REVIEW_AUDIT_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Review Event ID",
+              "displayName": "Review Event ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Candidate ID",
+              "displayName": "Candidate ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Candidate Name",
+              "displayName": "Candidate Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Candidate Email",
+              "displayName": "Candidate Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Role Title",
+              "displayName": "Role Title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Previous Status",
+              "displayName": "Previous Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "New Status",
+              "displayName": "New Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Decision",
+              "displayName": "Decision",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Reviewer",
+              "displayName": "Reviewer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Review Notes",
+              "displayName": "Review Notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Reviewed At",
+              "displayName": "Reviewed At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        740,
+        220
+      ],
+      "id": "d546f0bf-66cf-4b45-9e0b-a2ee37d53598",
+      "name": "Append Immutable Review Audit Event",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.Decision }}",
+                    "rightValue": "Shortlist",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "928fa92d-cb00-4474-a184-071c2903f9b6"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.Decision }}",
+                    "rightValue": "Reject",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "0b9c8dc3-b5d9-42cf-bc3b-e9e85789cd98"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.Decision }}",
+                    "rightValue": "Request More Information",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "2e26cde6-6d89-459e-bb56-da6f611a9571"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.Decision }}",
+                    "rightValue": "Hold",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "ef86c3d1-e90f-4e31-82a7-9e95d15af063"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        980,
+        0
+      ],
+      "id": "4f77b155-0092-487c-b3bd-adcb83072a12",
+      "name": "Route Approved Human Decision"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are a professional recruiting coordinator. Draft a respectful candidate email based only on the recruiter's explicit human decision and supplied facts. Never invent dates, times, links, salary, benefits, promises, or interview arrangements. Do not mention AI scores or automated ranking. For a shortlist, invite the candidate to reply with availability; this is not a job offer. For rejection, be courteous and do not criticize the person. For a request for more information, state only the specific clarification in the recruiter notes. Return only the email body."
+            },
+            {
+              "content": "Human-approved decision: {{ $json.Decision }}\nCandidate name: {{ $json.Name }}\nRole: {{ $json['Role Title'] }}\nRecruiter notes: {{ $json['Review Notes'] }}\n\nWrite the appropriate candidate email. Do not add details not supplied."
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        1220,
+        0
+      ],
+      "id": "3b65ee7f-9f18-4af6-b34a-1df84b64b58c",
+      "name": "Draft Candidate Communication After Human Decision"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $(\"Validate Decision & Load Candidate Details\").first().json.Email }}",
+        "subject": "={{ $json.Decision === 'Shortlist' ? 'Next Stage Invitation' : $json.Decision === 'Reject' ? 'Application Update' : 'Additional Information Requested' }}",
+        "emailType": "text",
+        "message": "={{ $json.output[0].content[0].text }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1460,
+        0
+      ],
+      "id": "a1f2cd5e-c5ba-43ab-a912-7ed994ad1e80",
+      "name": "Send Human-Approved Candidate Email"
+    },
+    {
+      "parameters": {
+        "content": "## Human decision gate\nOnly a recruiter-submitted decision can trigger a candidate email.\n- Shortlist -> invitation draft -> send\n- Reject -> respectful application update -> send\n- Request More Information -> clarification email -> send\n- Hold -> update status and audit log only\n\nProtect this internal form URL. Use reviewer authentication/access controls supported by your n8n deployment. The form URL is not a substitute for proper access control.",
+        "height": 300,
+        "width": 480
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        480,
+        360
+      ],
+      "id": "e6347bff-e5ce-499e-b5d6-30782bc7c716",
+      "name": "Review Workflow Notes"
+    }
+  ],
+  "connections": {
+    "Recruiter Review Form": {
+      "main": [
+        [
+          {
+            "node": "Find Candidate Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Candidate Record": {
+      "main": [
+        [
+          {
+            "node": "Validate Decision & Load Candidate Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Decision & Load Candidate Details": {
+      "main": [
+        [
+          {
+            "node": "Update Candidate Pipeline Record",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Append Immutable Review Audit Event",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route Approved Human Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Approved Human Decision": {
+      "main": [
+        [
+          {
+            "node": "Draft Candidate Communication After Human Decision",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Draft Candidate Communication After Human Decision",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Draft Candidate Communication After Human Decision",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Draft Candidate Communication After Human Decision": {
+      "main": [
+        [
+          {
+            "node": "Send Human-Approved Candidate Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Karachi",
+    "saveExecutionProgress": true
+  },
+  "versionId": "0d139333-a16f-4b04-8976-b3a4300354e7",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": [],
+  "pinData": {},
+  "description": "Internal recruiter form, candidate lookup, status upsert, append-only decision audit log, and candidate communication only after a human-approved decision."
+}

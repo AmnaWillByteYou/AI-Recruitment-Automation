@@ -1,0 +1,151 @@
+{
+  "name": "Recruitment System 03 - Daily Pipeline Analytics",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "5b641b94-9929-46f2-96ee-195cd3f5e374",
+      "name": "Daily Pipeline Schedule"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_CANDIDATE_DATA_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "id"
+        },
+        "returnAll": true,
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        240,
+        0
+      ],
+      "id": "8a9d70e9-53bb-48b8-8f0c-24e02e772bb0",
+      "name": "Read Candidate Pipeline",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map(x=>x.json||{}).filter(r=>r['Candidate ID']);\nconst count = {};\nfor (const r of rows) {\n const s=String(r.Status||'Unknown');\n count[s]=(count[s]||0)+1;\n}\nconst scores=rows.map(r=>Number(r['Match Score'])).filter(n=>Number.isFinite(n));\nconst avg=scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : 0;\nconst duplicates=rows.filter(r=>String(r['Potential Duplicate']).toUpperCase()==='YES').length;\nconst pending=rows.filter(r=>String(r.Status||'').includes('Pending') || String(r.Status||'').includes('Manual Review')).length;\nconst lines=Object.entries(count).sort((a,b)=>a[0].localeCompare(b[0])).map(([k,v])=>`- ${k}: ${v}`);\nconst report=[\n`Recruitment pipeline — ${new Date().toLocaleString('en-PK',{timeZone:'Asia/Karachi'})}`,\n`Total applications: ${rows.length}`,\n`Average rubric match score: ${avg}/100 (advisory only)`,\n`Potential duplicate records: ${duplicates}`,\n`Awaiting recruiter review: ${pending}`,\n'',\n'Pipeline by status:',\n...(lines.length?lines:['- No candidate records found.']),\n'',\n'Reminder: AI scores are decision-support signals. Hiring decisions require human review.'\n].join('\\\\n');\nreturn [{json:{report,total:rows.length,averageScore:avg,duplicates,pending}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "id": "4a4fd4a3-a5b5-4f08-8ef2-e5dbbf92d6a0",
+      "name": "Calculate Pipeline Metrics"
+    },
+    {
+      "parameters": {
+        "sendTo": "REPLACE_WITH_RECRUITER_EMAIL",
+        "subject": "Daily Recruitment Pipeline Report — {{ $now.toFormat('yyyy-LL-dd') }}",
+        "emailType": "text",
+        "message": "={{ $json.report }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        740,
+        0
+      ],
+      "id": "1c31d4b7-ec50-442e-b202-ddb4d13b434e",
+      "name": "Email Daily Recruitment Report"
+    },
+    {
+      "parameters": {
+        "content": "## Reporting\nRuns daily at 08:00 Asia/Karachi. Replace the recipient placeholder and connect Gmail + Google Sheets credentials. Metrics are descriptive pipeline counts; do not treat average AI match score as a hiring KPI.",
+        "height": 220,
+        "width": 420
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        480,
+        240
+      ],
+      "id": "db55be32-8d45-490f-822f-819a3b1cf46a",
+      "name": "Analytics Setup Notes"
+    }
+  ],
+  "connections": {
+    "Daily Pipeline Schedule": {
+      "main": [
+        [
+          {
+            "node": "Read Candidate Pipeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Candidate Pipeline": {
+      "main": [
+        [
+          {
+            "node": "Calculate Pipeline Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Pipeline Metrics": {
+      "main": [
+        [
+          {
+            "node": "Email Daily Recruitment Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Karachi",
+    "saveExecutionProgress": true
+  },
+  "versionId": "bae83e3a-7146-4cd1-a755-8860488c8e3d",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": [],
+  "pinData": {},
+  "description": "Daily recruiter email report with pipeline counts, average advisory score, duplicate flags and pending-review count."
+}

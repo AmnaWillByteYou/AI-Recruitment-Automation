@@ -1,0 +1,101 @@
+{
+  "name": "Recruitment System 04 - Central Error Monitoring",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "540e208f-a08d-42b2-8cd8-465495c47ae2",
+      "name": "Workflow Error Trigger"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const e=$json.execution||{};\nconst w=$json.workflow||{};\nconst err=e.error||{};\nconst safeMessage=String(err.message||'Unknown workflow error').slice(0,1200);\nconst report=[\n`Workflow failure alert`,\n`Workflow: ${w.name||'Unknown'}`,\n`Execution ID: ${e.id||'Unavailable'}`,\n`Execution URL: ${e.url||'Unavailable'}`,\n`Error: ${safeMessage}`,\n`Time: ${new Date().toISOString()}`,\n'',\n'Review the failed execution in n8n. Avoid forwarding candidate resume text or other personal data in alert emails.'\n].join('\\\\n');\nreturn [{json:{report}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "id": "4369cd7b-eec6-44c0-81c9-a55472f74412",
+      "name": "Format Safe Error Alert"
+    },
+    {
+      "parameters": {
+        "sendTo": "REPLACE_WITH_RECRUITER_EMAIL",
+        "subject": "n8n Recruitment Workflow Failure",
+        "emailType": "text",
+        "message": "={{ $json.report }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        0
+      ],
+      "id": "78a5bd37-c630-470a-8834-819d862966e1",
+      "name": "Send Workflow Failure Alert"
+    },
+    {
+      "parameters": {
+        "content": "## Required configuration\nImport this workflow, connect Gmail credentials, replace the recipient placeholder, then open each production workflow's Settings and select this workflow as its Error Workflow. Test by running a controlled failure. Alerts intentionally omit candidate resume contents.",
+        "height": 240,
+        "width": 440
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        240,
+        220
+      ],
+      "id": "4f59c90f-baaf-47af-993a-3dac9ec30078",
+      "name": "Error Workflow Setup"
+    }
+  ],
+  "connections": {
+    "Workflow Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Format Safe Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Safe Error Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Workflow Failure Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Karachi",
+    "saveExecutionProgress": true
+  },
+  "versionId": "2234a2e5-d61a-4859-a440-7a1ae3ce7395",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": [],
+  "pinData": {},
+  "description": "Centralized n8n error workflow. Configure it as the Error Workflow for the intake, review and analytics workflows."
+}

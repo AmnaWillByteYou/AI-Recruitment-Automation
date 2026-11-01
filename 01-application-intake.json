@@ -1,0 +1,596 @@
+{
+  "name": "Recruitment System 01 - Application Intake & AI Evidence Assessment",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Job Application",
+        "formDescription": "Submit your details and PDF resume for review. A recruiter will assess your application. AI-generated analysis is advisory only.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Name",
+              "placeholder": "Full name",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Email",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Phone Number",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Role Title",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Job ID",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Resume Upload",
+              "fieldType": "file",
+              "acceptFileTypes": ".pdf",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Job Description",
+              "fieldType": "textarea",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        0
+      ],
+      "id": "cec8fd99-d640-43b5-87a9-a745e3a2ee10",
+      "name": "On Application Submission",
+      "webhookId": "183173bf-cb02-48d0-8335-6c6b9525703d"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "Resume_Upload",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        0
+      ],
+      "id": "f58fef56-7cd4-44c0-ad7d-4d63e533156c",
+      "name": "Extract Resume Text"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_CANDIDATE_DATA_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "id"
+        },
+        "returnAll": true,
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        440,
+        0
+      ],
+      "id": "c2e9811b-ef84-4f70-b045-c72fb2e1f5ec",
+      "name": "Load Existing Candidate Records",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const form = $('On Application Submission').first().json;\nconst resumeText = String($('Extract Resume Text').first().json.text ?? '').trim();\nconst rows = $input.all().map(x => x.json || {});\nconst name = String(form.Name ?? '').trim();\nconst email = String(form.Email ?? '').trim().toLowerCase();\nconst phone = String(form['Phone Number'] ?? '').trim();\nconst roleTitle = String(form['Role Title'] ?? '').trim();\nconst jobId = String(form['Job ID'] ?? '').trim();\nconst jobDescription = String(form['Job Description'] ?? '').trim();\n\nif (!name || !email || !phone || !roleTitle || !jobId || !jobDescription) {\n  throw new Error('Required application fields are missing.');\n}\nif (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {\n  throw new Error('The submitted email address is invalid.');\n}\nif (!resumeText || resumeText.length < 40) {\n  throw new Error('The PDF contains too little readable text. Ask the applicant to upload a text-based PDF.');\n}\nif (resumeText.length > 50000) {\n  throw new Error('The extracted resume is unusually long. Review the file manually before processing.');\n}\n\nconst existing = rows.filter(r => String(r.Email ?? '').trim().toLowerCase() === email\n  && String(r['Job ID'] ?? '').trim().toLowerCase() === jobId.toLowerCase());\nconst duplicate = existing.length > 0;\nconst duplicateOf = duplicate ? String(existing[0]['Candidate ID'] ?? '') : '';\nconst now = new Date().toISOString();\nconst candidateId = `CAND-${now.slice(0,10).replace(/-/g,'')}-${Math.random().toString(36).slice(2,8).toUpperCase()}`;\n\nreturn [{\n  json: {\n    'Candidate ID': candidateId,\n    Name: name,\n    Email: email,\n    'Phone Number': phone,\n    'Role Title': roleTitle,\n    'Job ID': jobId,\n    'Job Description': jobDescription,\n    ResumeText: resumeText,\n    'Submitted At': now,\n    'Last Updated': now,\n    'Potential Duplicate': duplicate ? 'YES' : 'NO',\n    'Duplicate Of Candidate ID': duplicateOf,\n    Status: duplicate ? 'Potential Duplicate - Manual Review' : 'Pending Human Review',\n    'AI Decision': 'ADVISORY ONLY - HUMAN REVIEW REQUIRED'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "id": "f9064db5-58b1-45af-9506-1453b1785ea1",
+      "name": "Validate, Create ID & Detect Duplicates"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4.1-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are an evidence-based recruitment analysis assistant. Your output supports a human recruiter; you do not make hiring decisions.\nEvaluate only job-related requirements explicitly present in the job description. Ignore or do not infer age, sex, gender, race, ethnicity, religion, disability, health, family status, nationality, photographs, names as demographic proxies, or any other protected/sensitive traits. Do not use writing style, employment gaps, school prestige, or unrelated personal details as proxies for ability.\nFor each rating, use an integer from 0 to 5 and cite specific resume evidence. A missing detail means \"not evidenced\", not proof the candidate lacks the ability. Separate required criteria from preferred criteria. Do not invent experience, qualifications, dates, or credentials. If the resume is ambiguous, state that uncertainty.\nReturn ONLY valid JSON, no markdown, using this schema:\n{\n \"summary\":\"short factual recruiter summary\",\n \"essentialSkillsRating\":0,\n \"relevantExperienceRating\":0,\n \"roleQualificationsRating\":0,\n \"evidenceQualityRating\":0,\n \"preferredSkillsRating\":0,\n \"strengths\":[\"job-related evidence\"],\n \"skillsEvidence\":[\"requirement -> resume evidence\"],\n \"relevantGaps\":[\"job-related requirement not evidenced or mismatch\"],\n \"missingEvidence\":[\"information a recruiter may clarify\"],\n \"confidence\":0,\n \"caveats\":[\"limitations or uncertainty\"]\n}\nRating guidance: 0=no evidence/clear mismatch; 1=very limited evidence; 2=partial evidence; 3=reasonable evidence; 4=strong evidence; 5=very strong direct evidence. Confidence is 0-100 and describes confidence in the quality of this document-based assessment, not the candidate's ability. Do not output a final shortlist/reject recommendation."
+            },
+            {
+              "content": "Candidate ID: {{ $json[\"Candidate ID\"] }}\nRole: {{ $json[\"Role Title\"] }}\nJob ID: {{ $json[\"Job ID\"] }}\n\nJob description:\n{{ $json[\"Job Description\"] }}\n\nResume text:\n{{ $json.ResumeText }}\n\nAssess the evidence using the schema. Do not make a hiring decision."
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        900,
+        0
+      ],
+      "id": "d24a694e-5d03-445e-8381-e04bf996764b",
+      "name": "AI Evidence-Based Assessment"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const raw = String($json.output?.[0]?.content?.[0]?.text ?? $json.text ?? '').trim();\nif (!raw) throw new Error('AI assessment returned an empty response.');\nconst cleaned = raw.replace(/^```(?:json)?\\s*/i,'').replace(/\\s*```$/i,'').trim();\nlet a;\ntry { a = JSON.parse(cleaned); }\ncatch {\n  const start = cleaned.indexOf('{'), end = cleaned.lastIndexOf('}');\n  if (start < 0 || end <= start) throw new Error('AI assessment was not valid JSON.');\n  a = JSON.parse(cleaned.slice(start,end+1));\n}\nconst base = $('Validate, Create ID & Detect Duplicates').first().json;\nconst rating = (v,k) => {\n  const n = Number(v);\n  if (!Number.isInteger(n) || n < 0 || n > 5) throw new Error(`Invalid ${k}: expected integer 0-5.`);\n  return n;\n};\nconst r1 = rating(a.essentialSkillsRating,'essentialSkillsRating');\nconst r2 = rating(a.relevantExperienceRating,'relevantExperienceRating');\nconst r3 = rating(a.roleQualificationsRating,'roleQualificationsRating');\nconst r4 = rating(a.evidenceQualityRating,'evidenceQualityRating');\nconst r5 = rating(a.preferredSkillsRating,'preferredSkillsRating');\nconst confidence = Number(a.confidence);\nif (!Number.isInteger(confidence) || confidence < 0 || confidence > 100) throw new Error('AI confidence must be an integer 0-100.');\nconst arr = v => Array.isArray(v) ? v.map(x => String(x).trim()).filter(Boolean) : [];\nconst score = Math.round((r1*0.35 + r2*0.25 + r3*0.20 + r4*0.10 + r5*0.10) * 20);\nreturn [{\n json: {\n  'Candidate ID':base['Candidate ID'], Name:base.Name, Email:base.Email,\n  'Phone Number':base['Phone Number'], 'Role Title':base['Role Title'], 'Job ID':base['Job ID'],\n  'Assessment Summary':String(a.summary ?? '').trim(),\n  'Match Score':score,\n  'Essential Skills Rating':r1,'Relevant Experience Rating':r2,\n  'Role Qualifications Rating':r3,'Evidence Quality Rating':r4,'Preferred Skills Rating':r5,\n  Strengths:arr(a.strengths).join(' | '),\n  'Skills Evidence':arr(a.skillsEvidence).join(' | '),\n  'Relevant Gaps':arr(a.relevantGaps).join(' | '),\n  'Missing Evidence':arr(a.missingEvidence).join(' | '),\n  'AI Confidence':confidence,\n  'Potential Duplicate':base['Potential Duplicate'],\n  'Duplicate Of Candidate ID':base['Duplicate Of Candidate ID'],\n  'AI Decision':'ADVISORY ONLY - HUMAN REVIEW REQUIRED',\n  Status:base.Status,\n  'Submitted At':base['Submitted At'],\n  'Last Updated':new Date().toISOString(),\n  Reviewer:'',\n  'Review Decision':'',\n  'Review Notes':'',\n  'Job Description':base['Job Description']\n }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        0
+      ],
+      "id": "d4f79839-7c21-4655-85d4-09573f51436d",
+      "name": "Validate Assessment & Calculate Weighted Score"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_CANDIDATE_DATA_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Candidate ID",
+              "displayName": "Candidate ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Phone Number",
+              "displayName": "Phone Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Role Title",
+              "displayName": "Role Title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Job ID",
+              "displayName": "Job ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Assessment Summary",
+              "displayName": "Assessment Summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Match Score",
+              "displayName": "Match Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Essential Skills Rating",
+              "displayName": "Essential Skills Rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Relevant Experience Rating",
+              "displayName": "Relevant Experience Rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Role Qualifications Rating",
+              "displayName": "Role Qualifications Rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Evidence Quality Rating",
+              "displayName": "Evidence Quality Rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Preferred Skills Rating",
+              "displayName": "Preferred Skills Rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Strengths",
+              "displayName": "Strengths",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Skills Evidence",
+              "displayName": "Skills Evidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Relevant Gaps",
+              "displayName": "Relevant Gaps",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Missing Evidence",
+              "displayName": "Missing Evidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "AI Confidence",
+              "displayName": "AI Confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Potential Duplicate",
+              "displayName": "Potential Duplicate",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Duplicate Of Candidate ID",
+              "displayName": "Duplicate Of Candidate ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "AI Decision",
+              "displayName": "AI Decision",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Submitted At",
+              "displayName": "Submitted At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Last Updated",
+              "displayName": "Last Updated",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Reviewer",
+              "displayName": "Reviewer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Review Decision",
+              "displayName": "Review Decision",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Review Notes",
+              "displayName": "Review Notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1380,
+        0
+      ],
+      "id": "463e5640-a0b0-4e44-8f76-ab9a998ada18",
+      "name": "Save Candidate Record",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.Email }}",
+        "subject": "={{ 'Application received — ' + $json['Candidate ID'] }}",
+        "emailType": "text",
+        "message": "=Hello {{ $json.Name }},\n\nWe have received your application for {{ $json['Role Title'] }} ({{ $json['Job ID'] }}).\n\nYour application will be reviewed by a recruiter. This confirmation does not represent a hiring decision or interview invitation.\n\nRegards,\nRecruitment Team",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1600,
+        0
+      ],
+      "id": "2de536ff-017b-4e50-9c62-6efb54ce4f5b",
+      "name": "Send Application Confirmation"
+    },
+    {
+      "parameters": {
+        "content": "## Setup before activation\n- Connect OpenAI, Google Sheets and Gmail credentials.\n- Confirm the Candidate Data sheet ID and create the exact headers in SETUP-GUIDE.md.\n- The form requires a PDF resume and a Job ID.\n- AI produces evidence summaries and weighted rubric scores only. It never rejects or hires anyone.\n- Potential duplicate applications are flagged for recruiter review.\n- Configure execution-data retention and restrict access to resumes and candidate records.\n- Test with synthetic candidate data before using real applications.",
+        "height": 380,
+        "width": 460
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        880,
+        300
+      ],
+      "id": "070ac38f-ea1f-4fe9-a862-747489e43933",
+      "name": "Setup & Safety Notes"
+    }
+  ],
+  "connections": {
+    "On Application Submission": {
+      "main": [
+        [
+          {
+            "node": "Extract Resume Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Resume Text": {
+      "main": [
+        [
+          {
+            "node": "Load Existing Candidate Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Existing Candidate Records": {
+      "main": [
+        [
+          {
+            "node": "Validate, Create ID & Detect Duplicates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate, Create ID & Detect Duplicates": {
+      "main": [
+        [
+          {
+            "node": "AI Evidence-Based Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Evidence-Based Assessment": {
+      "main": [
+        [
+          {
+            "node": "Validate Assessment & Calculate Weighted Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Assessment & Calculate Weighted Score": {
+      "main": [
+        [
+          {
+            "node": "Save Candidate Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Candidate Record": {
+      "main": [
+        [
+          {
+            "node": "Send Application Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Karachi",
+    "saveExecutionProgress": true
+  },
+  "versionId": "34e2792e-96db-4040-bc0e-337e44b3a018",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": [],
+  "pinData": {},
+  "description": "Candidate intake, PDF extraction, duplicate flagging, structured evidence analysis, weighted rubric scoring, Google Sheets storage and receipt confirmation. All hiring decisions remain human-controlled."
+}
