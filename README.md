@@ -66,7 +66,3 @@ ai-recruitment-automation/
 ├── LICENSE
 └── README.md
 ```
-
-## License
-
-MIT. See [`LICENSE`](LICENSE).
